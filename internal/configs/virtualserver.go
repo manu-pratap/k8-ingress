@@ -205,6 +205,7 @@ func generateUpstream(upstreamName string, upstream conf_v1alpha1.Upstream, endp
 		s := version2.UpstreamServer{
 			Address:     e,
 			MaxFails:    generateIntFromPointer(upstream.MaxFails, cfgParams.MaxFails),
+			MaxConns:    generateIntFromPointer(upstream.MaxConns, cfgParams.MaxConns),
 			FailTimeout: generateTime(upstream.FailTimeout, cfgParams.FailTimeout),
 		}
 		upsServers = append(upsServers, s)
@@ -214,6 +215,7 @@ func generateUpstream(upstreamName string, upstream conf_v1alpha1.Upstream, endp
 		s := version2.UpstreamServer{
 			Address:     nginx502Server,
 			MaxFails:    generateIntFromPointer(upstream.MaxFails, cfgParams.MaxFails),
+			MaxConns:    generateIntFromPointer(upstream.MaxConns, cfgParams.MaxConns),
 			FailTimeout: generateTime(upstream.FailTimeout, cfgParams.FailTimeout),
 		}
 		upsServers = append(upsServers, s)
