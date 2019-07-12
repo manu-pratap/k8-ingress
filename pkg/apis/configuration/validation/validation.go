@@ -57,6 +57,16 @@ func validateTLS(tls *v1alpha1.TLS, fieldPath *field.Path) field.ErrorList {
 	return validateSecretName(tls.Secret, fieldPath.Child("secret"))
 }
 
+func validatePositiveInt(n int, fieldPath *field.Path) field.ErrorList {
+	allErrs := field.ErrorList{}
+
+	if n < 0 {
+		return append(allErrs, field.Invalid(fieldPath, n, "must be positive"))
+	}
+
+	return allErrs
+}
+
 func validatePositiveIntOrZero(n *int, fieldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if n == nil {
@@ -105,6 +115,82 @@ func validateUpstreamLBMethod(lBMethod string, fieldPath *field.Path, isPlus boo
 	return allErrs
 }
 
+func validateUpstreamHealthCheck(hc *v1alpha1.HealthCheck, fieldPath *field.Path) field.ErrorList {
+	allErrs := field.ErrorList{}
+
+	if hc == nil || !hc.Enable {
+		return allErrs
+	}
+
+	allErrs = append(allErrs, validatePath(hc.Path, fieldPath.Child("path"))...)
+	allErrs = append(allErrs, validateTime(hc.Interval, fieldPath.Child("interval"))...)
+	allErrs = append(allErrs, validateTime(hc.Jitter, fieldPath.Child("jitter"))...)
+	allErrs = append(allErrs, validatePositiveInt(hc.Fails, fieldPath.Child("fails"))...)
+	allErrs = append(allErrs, validatePositiveInt(hc.Passes, fieldPath.Child("passes"))...)
+	allErrs = append(allErrs, validateTime(hc.ConnectTimeout, fieldPath.Child("connect-timeout"))...)
+	allErrs = append(allErrs, validateTime(hc.ReadTimeout, fieldPath.Child("read-timeout"))...)
+	allErrs = append(allErrs, validateTime(hc.SendTimeout, fieldPath.Child("send-timeout"))...)
+	allErrs = append(allErrs, validateStatusMatch(hc.StatusMatch, fieldPath.Child("statusMatch"))...)
+
+	for i, header := range hc.Headers {
+		idxPath := fieldPath.Child("headers").Index(i)
+		allErrs = append(allErrs, validateHeader(header, idxPath)...)
+	}
+
+	if hc.Port > 0 {
+		for _, msg := range validation.IsValidPortNum(int(hc.Port)) {
+			allErrs = append(allErrs, field.Invalid(fieldPath.Child("port"), hc.Port, msg))
+		}
+	}
+
+	return allErrs
+}
+
+const statusMatchFmt = "(\\d*|\\s|\\-|\\!\\s)*"
+const statusMatchFmtErrMsg string = "a valid statusMatch must consist of digits, spaces, `! ` or `-`"
+
+var statusMatchRegexp = regexp.MustCompile("^" + statusMatchFmt + "$")
+
+func validateStatusMatch(s string, fieldPath *field.Path) field.ErrorList {
+	allErrs := field.ErrorList{}
+	if !statusMatchRegexp.MatchString(s) {
+		msg := validation.RegexError(statusMatchFmtErrMsg, statusMatchFmt, "200", "! 500", "200-399")
+		return append(allErrs, field.Invalid(fieldPath, s, msg))
+	}
+	return allErrs
+}
+
+func validateHeader(h v1alpha1.Header, fieldPath *field.Path) field.ErrorList {
+	allErrs := field.ErrorList{}
+
+	if h.Name == "" {
+		allErrs = append(allErrs, field.Required(fieldPath.Child("name"), ""))
+	}
+
+	for _, msg := range validation.IsHTTPHeaderName(h.Name) {
+		allErrs = append(allErrs, field.Invalid(fieldPath.Child("name"), h.Name, msg))
+	}
+
+	for _, msg := range isValidHeaderValue(h.Value) {
+		allErrs = append(allErrs, field.Invalid(fieldPath.Child("value"), h.Value, msg))
+	}
+
+	return allErrs
+}
+
+const headerValueFmt = "[^{};'\"]*"
+const headerValueFmtErrMsg string = "a valid header value must not include `'`, `\"`, {`, `}` or `;`"
+
+var headerValueFmtRegexp = regexp.MustCompile("^" + headerValueFmt + "$")
+
+func isValidHeaderValue(s string) []string {
+	if !headerValueFmtRegexp.MatchString(s) {
+		return []string{validation.RegexError(headerValueFmtErrMsg, headerValueFmt, "my.service", "service")}
+
+	}
+	return nil
+}
+
 // validateSecretName checks if a secret name is valid.
 // It performs the same validation as ValidateSecretName from k8s.io/kubernetes/pkg/apis/core/validation/validation.go.
 func validateSecretName(name string, fieldPath *field.Path) field.ErrorList {
@@ -147,6 +233,7 @@ func validateUpstreams(upstreams []v1alpha1.Upstream, fieldPath *field.Path, isP
 		allErrs = append(allErrs, validateTime(u.FailTimeout, idxPath.Child("fail-timeout"))...)
 		allErrs = append(allErrs, validatePositiveIntOrZero(u.MaxFails, idxPath.Child("max-fails"))...)
 		allErrs = append(allErrs, validatePositiveIntOrZero(u.Keepalive, idxPath.Child("keepalive"))...)
+		allErrs = append(allErrs, validateUpstreamHealthCheck(u.HealthCheck, idxPath.Child("healthCheck"))...)
 
 		for _, msg := range validation.IsValidPortNum(int(u.Port)) {
 			allErrs = append(allErrs, field.Invalid(idxPath.Child("port"), u.Port, msg))

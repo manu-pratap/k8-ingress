@@ -18,6 +18,8 @@ This document is the reference documentation for the resources. To see additiona
   - [Common Parts of the VirtualServer and VirtualServerRoute](#Common-Parts-of-the-VirtualServer-and-VirtualServerRoute)
     - [Upstream](#Upstream)
     - [Upstream.TLS](#UpstreamTLS)
+    - [Upstream.Healthcheck](#UpstreamHealthcheck)
+    - [Header](#Header)
     - [Split](#Split)
     - [Rules](#Rules)
     - [Condition](#Condition)
@@ -201,11 +203,67 @@ tls:
 `read-timeout` | The timeout for reading a response from an upstream server. See the [proxy_read_timeout](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_read_timeout) directive.  The default is specified in the `proxy-read-timeout` ConfigMap key. | `string` | No
 `send-timeout` | The timeout for transmitting a request to an upstream server. See the [proxy_send_timeout](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_send_timeout) directive. The default is specified in the `proxy-send-timeout` ConfigMap key. | `string` | No
 | `tls` | The TLS configuration for the Upstream. | [`tls`](#UpstreamTLS) | No |
+| `healthCheck` | The health check configuration for the Upstream. See the [health_check](http://nginx.org/en/docs/http/ngx_http_upstream_hc_module.html#health_check) directive. Note: this feature is supported only in NGINX Plus. | [`healthcheck`](#UpstreamHealthcheck) | No |
 
 ### Upstream.TLS
 | Field | Description | Type | Required |
 | ----- | ----------- | ---- | -------- |
 | `enable` | Enables HTTPS for requests to upstream servers. The default is `False`, meaning that HTTP will be used. | `boolean` | No |
+
+### Upstream.Healthcheck
+
+The Healthcheck defines an [active health check](https://docs.nginx.com/nginx/admin-guide/load-balancer/http-health-check/). In the example below we enable a health check for an upstream and configure all the available parameters.
+
+```yaml
+name: tea
+service: tea-svc
+port: 80
+healthCheck:
+  enable: true
+  path: /healthz
+  interval: 20s
+  jitter: 3s
+  fails: 5
+  passes: 5
+  port: 8080
+  tls:
+    enable: true
+  connect-timeout: 10s
+  read-timeout: 10s
+  send-timeout: 10s
+  headers:
+  - name: Host
+    value: my.service
+  statusMatch: "! 500"
+```
+
+| Field | Description | Type | Required |
+| ----- | ----------- | ---- | -------- |
+| `enable` | Enables a health check for an upstream server. The default is `false`. | `boolean` | No |
+| `path`  | The path used for health check requests. The default is `/`. | `string` | No |
+| `interval` | The interval between two consecutive health checks. The default is `5s`. | `time` | No |
+| `jitter` | The time within which each health check will be randomly delayed. By default, there is no delay. | `time` | No |
+| `fails` | The number of consecutive failed health checks of a particular upstream server after which this server will be considered unhealthy. The default is `1`. | `integer` | No |
+| `passes` | The number of consecutive passed health checks of a particular upstream server after which the server will be considered healthy. The default is `1`. | `integer` | No |
+| `port` | The port used for health check requests. By default, the port of the upstream is used. Note: in contrast with the port of the upstream, this port is not a service port, but a port of a pod. | `integer` | No |
+| `tls` | The TLS configuration used for health check requests. By default, the `tls` field of the upstream is used. | [`upstream.tls`](#UpstreamTLS) | No |
+| `connect-timeout` | The timeout for establishing a connection with an upstream server. By default, the `connect-timeout` of the upstream is used. | `string` | No |
+| `read-timeout` | The timeout for reading a response from an upstream server. By default, the `read-timeout` of the upstream is used. | `string` | No |
+| `send-timeout` | The timeout for transmitting a request to an upstream server. By default, the `send-timeout` of the upstream is used. | `string` | No |
+| `headers` | The request headers used for health check requests. NGINX Plus always sets the `Host`, `User-Agent` and `Connection` headers for health check requests. | [`[]header`](#Header) | No |
+| `statusMatch` | The expected response status codes of a health check.  By default, the response should have status code 2xx or 3xx. Examples: `“200”`, `“! 500”`, `"301-303 307"`. See the documentation of the [match](https://nginx.org/en/docs/http/ngx_http_upstream_hc_module.html?#match) directive. | `string` | No |
+
+### Header
+The header defines an HTTP Header:
+```yaml
+name: Host
+value: example.com
+```
+
+| Field | Description | Type | Required |
+| ----- | ----------- | ---- | -------- |
+| `name` | The name of the header. | `string` | Yes |
+| `value` | The value of the header. | `string` | No |
 
 ### Split
 
